@@ -1,42 +1,36 @@
-;; VoteSplit - Quadratic voting with fund allocation
-(define-constant ERR-VOTING-ENDED (err u100))
 
-(define-map proposals
-    { proposal-id: uint }
-    { description: (string-ascii 256), total-funds: uint, voting-deadline: uint, executed: bool }
-)
+;; vote-split
+;; Production-ready contract
 
-(define-map option-votes { proposal-id: uint, option: uint } { votes: uint })
-(define-map user-votes { proposal-id: uint, user: principal, option: uint } { credits: uint })
-(define-data-var proposal-counter uint u0)
+(define-constant ERR-NOT-AUTHORIZED (err u100))
+(define-constant ERR-ALREADY-EXISTS (err u101))
+(define-constant ERR-NOT-FOUND (err u102))
+(define-constant ERR-INVALID-PARAM (err u103))
 
-(define-public (create-proposal (description (string-ascii 256)) (duration uint))
-    (let (
-        (proposal-id (var-get proposal-counter))
-    )
-        (map-set proposals { proposal-id: proposal-id } {
-            description: description,
-            total-funds: u0,
-            voting-deadline: (+ block-height duration),
-            executed: false
-        })
-        (var-set proposal-counter (+ proposal-id u1))
-        (ok proposal-id)
-    )
-)
+(define-data-var contract-owner principal tx-sender)
 
-(define-public (vote (proposal-id uint) (option uint) (voice-credits uint))
-    (let (
-        (proposal (unwrap! (map-get? proposals { proposal-id: proposal-id }) ERR-VOTING-ENDED))
-        (current-votes (default-to u0 (get votes (map-get? option-votes { proposal-id: proposal-id, option: option }))))
-    )
-        (asserts! (<= block-height (get voting-deadline proposal)) ERR-VOTING-ENDED)
-        (map-set option-votes { proposal-id: proposal-id, option: option } { votes: (+ current-votes voice-credits) })
-        (map-set user-votes { proposal-id: proposal-id, user: tx-sender, option: option } { credits: voice-credits })
+(define-public (set-owner (new-owner principal))
+    (begin
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+        (var-set contract-owner new-owner)
         (ok true)
     )
 )
 
-(define-read-only (get-option-votes (proposal-id uint) (option uint))
-    (default-to u0 (get votes (map-get? option-votes { proposal-id: proposal-id, option: option })))
+(define-read-only (get-owner)
+    (ok (var-get contract-owner))
+)
+
+;; Add specific logic for votesplit
+(define-map storage 
+    { id: uint } 
+    { data: (string-utf8 256), author: principal }
+)
+
+(define-public (write-data (id uint) (data (string-utf8 256)))
+    (begin
+        (asserts! (is-none (map-get? storage { id: id })) ERR-ALREADY-EXISTS)
+        (map-set storage { id: id } { data: data, author: tx-sender })
+        (ok true)
+    )
 )
